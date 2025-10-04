@@ -1,5 +1,5 @@
-import { Kernel } from "./kernel";
-import { initGold, extendGold } from "./gold";
+import { Kernel } from "./engine/kernel";
+import { initGold, extendGold } from "./mods/gold/server";
 
 const kernel = new Kernel();
 initGold(kernel);
