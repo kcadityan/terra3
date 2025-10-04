@@ -1,0 +1,6 @@
+now lets say i want to add a new feature 1 - 
+i want to add a new feature as a mod 
+called world it is a 10x10 grid. in the first version all cells will be empty 
+how can we add it as a mod 
+what events will it have?since we dont have plaeyr or day noght cycle yet.
+
