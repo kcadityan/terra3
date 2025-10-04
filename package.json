@@ -2,7 +2,8 @@
   "name": "my-kernel",
   "version": "0.0.1",
   "scripts": {
-    "dev": "ts-node main.ts"
+    "dev": "ts-node main.ts",
+    "test": "ts-node tests/kernel.test.ts"
   },
   "devDependencies": {
     "ts-node": "^10.9.2",
