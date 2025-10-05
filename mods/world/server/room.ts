@@ -1,10 +1,13 @@
 import { Room, Server } from "colyseus";
-import { ArraySchema, Schema, type } from "@colyseus/schema";
+import type { Client } from "colyseus";
+import { ArraySchema, Schema, type, MapSchema } from "@colyseus/schema";
 
 import { Kernel } from "../../../engine/kernel";
 import { WORLD_EVENTS, type WorldSnapshot } from "../shared/world";
 import type { WorldModuleDependencies } from "./logic";
 import { createWorldService } from "./logic";
+import type { PlayerManager } from "../../player/server";
+import { PlayerState } from "../../player/server";
 
 export class TerrainDefinitionState extends Schema {
   @type("string") declare id: string;
@@ -27,6 +30,7 @@ export class WorldState extends Schema {
   @type("number") declare height: number;
   @type([WorldRowState]) declare rows: ArraySchema<WorldRowState>;
   @type([TerrainDefinitionState]) declare palette: ArraySchema<TerrainDefinitionState>;
+  @type({ map: PlayerState }) declare players: MapSchema<PlayerState>;
 
   constructor(snapshot: WorldSnapshot) {
     super();
@@ -34,13 +38,19 @@ export class WorldState extends Schema {
     this.height = snapshot.height;
     this.rows = new ArraySchema<WorldRowState>();
     this.palette = new ArraySchema<TerrainDefinitionState>();
+    this.players = new MapSchema<PlayerState>();
   }
 }
 
-export function createWorldRoomClass(deps: WorldModuleDependencies) {
+export interface WorldRoomDependencies extends WorldModuleDependencies {
+  createPlayerManager: () => PlayerManager;
+}
+
+export function createWorldRoomClass(deps: WorldRoomDependencies) {
   return class WorldRoom extends Room<WorldState> {
     private kernel: Kernel | undefined;
     private readonly service = createWorldService(deps);
+    private readonly playerManager = deps.createPlayerManager();
 
     onCreate(): void {
       this.kernel = new Kernel();
@@ -54,6 +64,29 @@ export function createWorldRoomClass(deps: WorldModuleDependencies) {
         const latest = this.generateWorld();
         this.applyWorld(latest);
       });
+
+      this.onMessage("player:move", (client, message: { direction: -1 | 1 }) => {
+        if (!message || (message.direction !== -1 && message.direction !== 1)) {
+          return;
+        }
+        this.playerManager.move(this.state.players, client.sessionId, message.direction);
+      });
+
+      this.onMessage("player:jump", (client) => {
+        this.playerManager.jump(this.state.players, client.sessionId);
+      });
+    }
+
+    onJoin(client: Client): void {
+      this.playerManager.spawn(this.state.players, client.sessionId);
+    }
+
+    onLeave(client: Client): void {
+      this.playerManager.remove(this.state.players, client.sessionId);
+    }
+
+    onDispose(): void {
+      this.playerManager.dispose();
     }
 
     private applyWorld(snapshot: WorldSnapshot): void {
@@ -80,7 +113,7 @@ export function createWorldRoomClass(deps: WorldModuleDependencies) {
         this.state.palette.push(entry);
       });
     }
-    
+
     private generateWorld(): WorldSnapshot {
       if (!this.kernel) {
         return this.service.generateSnapshot();
@@ -93,7 +126,7 @@ export function createWorldRoomClass(deps: WorldModuleDependencies) {
   };
 }
 
-export function registerWorldRoom(server: Server, deps: WorldModuleDependencies): void {
+export function registerWorldRoom(server: Server, deps: WorldRoomDependencies): void {
   const WorldRoom = createWorldRoomClass(deps);
   server.define("world", WorldRoom);
 }

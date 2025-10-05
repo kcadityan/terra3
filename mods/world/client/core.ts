@@ -1,7 +1,8 @@
 import { Client as ColyseusClient, Room } from "colyseus.js";
 
 import type { TerrainDefinition, TerrainId } from "../shared/terrain";
-import type { WorldSnapshot } from "../shared/world";
+import type { WorldStateView } from "../shared/world";
+import type { PlayerSnapshot } from "../../player/shared/player";
 
 type WorldStateMessage = {
   width: number;
@@ -10,9 +11,10 @@ type WorldStateMessage = {
     cells: Array<string>;
   }>;
   palette: Array<TerrainDefinition>;
+  players?: Map<string, PlayerSnapshot> | Record<string, PlayerSnapshot>;
 };
 
-type Listener = (snapshot: WorldSnapshot) => void;
+type Listener = (snapshot: WorldStateView) => void;
 
 export class WorldClient {
   private readonly client: ColyseusClient;
@@ -40,7 +42,27 @@ export class WorldClient {
     this.room?.send("regenerate");
   }
 
-  private fromState(state: WorldStateMessage): WorldSnapshot {
+  move(direction: -1 | 1): void {
+    this.room?.send("player:move", { direction });
+  }
+
+  jump(): void {
+    this.room?.send("player:jump");
+  }
+
+  private fromState(state: WorldStateMessage): WorldStateView {
+    const players: PlayerSnapshot[] = [];
+    const collection = state.players as unknown;
+    if (collection && typeof (collection as { forEach?: unknown }).forEach === "function") {
+      (collection as { forEach: (cb: (value: PlayerSnapshot) => void) => void }).forEach((player) => {
+        players.push({ ...player });
+      });
+    } else if (collection && typeof collection === "object") {
+      Object.values(collection as Record<string, PlayerSnapshot>).forEach((player) => {
+        players.push({ ...player });
+      });
+    }
+
     return {
       width: state.width,
       height: state.height,
@@ -50,7 +72,8 @@ export class WorldClient {
         name: entry.name,
         texturePath: entry.texturePath,
         color: entry.color
-      }))
+      })),
+      players
     };
   }
 }

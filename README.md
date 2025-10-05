@@ -39,7 +39,7 @@ Once running, the server exposes the `world` room which publishes a 10x10 empty 
 
 ### Terrain mods and world plan
 
-- Terrain materials (grass, dirt, stone, gold) live under `mods/terrain/**` and register their own textures/metadata with the shared registry.
+- Terrain materials (air, grass, dirt, stone, gold) live under `mods/terrain/**` and register their own textures/metadata with the shared registry.
 - The world module only stitches together a layout supplied by `engine/world/plan/defaultPlan.ts`. Replace that plan (or inject a new one) to change block counts and placement without modifying the mods themselves.
 - Each terrain mod owns its assets in its `textures/` directory, so contributors can ship new looks or entirely new materials independently of world generation.
 
@@ -56,3 +56,9 @@ Environment tweaks:
 
 - Change the world server host/port by exporting `VITE_WORLD_HOST`, `VITE_WORLD_PORT` (defaults: current hostname, `2567`).
 - Set `VITE_WORLD_SECURE=true` when serving the Colyseus server over TLS to force `wss`.
+- Movement controls (client): `←`/`A` and `→`/`D`; jump with `↑`/`W`/Space.
+
+### Player module
+
+- `mods/player/**` owns multiplayer player state. The server composes a per-room player manager that spawns each client on the surface, applies movement intents, and rebroadcasts jump states through Colyseus.
+- `WorldClient` exposes `move(-1|1)` and `jump()` helpers so UIs can publish intents without depending directly on Colyseus APIs.

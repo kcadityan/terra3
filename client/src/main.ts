@@ -32,6 +32,31 @@ function bootstrap() {
 
   // Start the Phaser game which connects via the world client scene.
   createWorldGame(worldClient, getMountNode());
+
+  const handleKeyDown = (event: KeyboardEvent) => {
+    switch (event.key) {
+      case "ArrowLeft":
+      case "a":
+      case "A":
+        worldClient.move(-1);
+        break;
+      case "ArrowRight":
+      case "d":
+      case "D":
+        worldClient.move(1);
+        break;
+      case "ArrowUp":
+      case "w":
+      case "W":
+      case " ":
+        worldClient.jump();
+        break;
+      default:
+        break;
+    }
+  };
+
+  window.addEventListener("keydown", handleKeyDown);
 }
 
 bootstrap();

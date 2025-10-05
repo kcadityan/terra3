@@ -4,8 +4,10 @@ import { Server } from "colyseus";
 
 import { registerWorldRoom } from "../../mods/world/server/colyseus";
 import { createTerrainRegistry } from "../../mods/world/shared/terrain";
+import { WORLD_WIDTH } from "../../mods/world/shared/world";
 import { registerBaseTerrain } from "../../mods/terrain";
-import { createDefaultWorldPlan } from "../world/plan/defaultPlan";
+import { createDefaultWorldPlan, PLAYER_SURFACE_ROW } from "../world/plan/defaultPlan";
+import { createPlayerManager as createPlayerManagerFactory } from "../../mods/player/server";
 
 export function createServer(port = Number(process.env.PORT ?? 2567)) {
   const app = express();
@@ -17,7 +19,14 @@ export function createServer(port = Number(process.env.PORT ?? 2567)) {
 
   registerWorldRoom(gameServer, {
     terrainRegistry,
-    planProvider: () => createDefaultWorldPlan(terrainRegistry)
+    planProvider: () => createDefaultWorldPlan(terrainRegistry),
+    createPlayerManager: () =>
+      createPlayerManagerFactory({
+        worldWidth: WORLD_WIDTH,
+        surfaceY: PLAYER_SURFACE_ROW,
+        jumpHeight: 2,
+        jumpDurationMs: 350
+      })
   });
 
   const ready = gameServer

@@ -1,13 +1,25 @@
 import assert from "node:assert/strict";
+import { MapSchema } from "@colyseus/schema";
+
 import { Kernel, Command, Event } from "../engine/kernel";
-import { createDefaultWorldPlan } from "../engine/world/plan/defaultPlan";
+import {
+  createDefaultWorldPlan,
+  GOLD_DEPOSITS,
+  AIR_LAYERS,
+  DIRT_LAYERS,
+  GRASS_LAYER,
+  PLAYER_SURFACE_ROW
+} from "../engine/world/plan/defaultPlan";
+import { WORLD_WIDTH, WORLD_HEIGHT } from "../mods/world/shared/world";
+import { createTerrainRegistry } from "../mods/world/shared/terrain";
+import { createWorldService } from "../mods/world/server";
 import { registerBaseTerrain } from "../mods/terrain";
+import { AIR_TERRAIN_ID } from "../mods/terrain/air";
 import { GRASS_TERRAIN_ID } from "../mods/terrain/grass";
 import { DIRT_TERRAIN_ID } from "../mods/terrain/dirt";
 import { STONE_TERRAIN_ID } from "../mods/terrain/stone";
 import { GOLD_TERRAIN_ID } from "../mods/terrain/gold";
-import { createTerrainRegistry } from "../mods/world/shared/terrain";
-import { createWorldService } from "../mods/world/server";
+import { createPlayerManager, PlayerState } from "../mods/player/server";
 
 type TestCase = { name: string; fn: () => void | Promise<void> };
 
@@ -80,41 +92,72 @@ test("world module uses terrain registry and plan to generate grid", () => {
   const world = events[0];
   assert.equal(world.type, "WorldGenerated");
   assert.equal(world.v, 1);
-  assert.equal(world.payload.width, 10);
-  assert.equal(world.payload.height, 10);
-  assert.equal(world.payload.cells.length, 10);
+  assert.equal(world.payload.width, WORLD_WIDTH);
+  assert.equal(world.payload.height, WORLD_HEIGHT);
+  assert.equal(world.payload.cells.length, WORLD_HEIGHT);
 
   const paletteIds = world.payload.palette.map((entry: unknown) => (entry as { id: string }).id);
-  [GRASS_TERRAIN_ID, DIRT_TERRAIN_ID, STONE_TERRAIN_ID, GOLD_TERRAIN_ID].forEach((id) => {
+  [AIR_TERRAIN_ID, GRASS_TERRAIN_ID, DIRT_TERRAIN_ID, STONE_TERRAIN_ID, GOLD_TERRAIN_ID].forEach((id) => {
     assert.ok(
       paletteIds.includes(id),
       `expected palette to contain terrain '${id}' but only had ${paletteIds.join(", ")}`
     );
   });
 
+  const goldSet = new Set(GOLD_DEPOSITS.map(({ x, y }) => `${x},${y}`));
+  const stoneStart = GRASS_LAYER + 1 + DIRT_LAYERS;
+
   world.payload.cells.forEach((row: unknown, y: number) => {
     assert.ok(Array.isArray(row));
-    assert.equal((row as unknown[]).length, 10);
+    assert.equal((row as unknown[]).length, WORLD_WIDTH);
     (row as unknown[]).forEach((terrainId: unknown, x: number) => {
       assert.equal(typeof terrainId, "string");
 
-      if (y === 0) {
+      const key = `${x},${y}`;
+      if (goldSet.has(key)) {
+        assert.equal(terrainId, GOLD_TERRAIN_ID);
+        return;
+      }
+
+      if (y < AIR_LAYERS) {
+        assert.equal(terrainId, AIR_TERRAIN_ID);
+      } else if (y === GRASS_LAYER) {
         assert.equal(terrainId, GRASS_TERRAIN_ID);
-      } else if (y <= 2) {
+      } else if (y < stoneStart) {
         assert.equal(terrainId, DIRT_TERRAIN_ID);
       } else {
-        if (
-          (x === Math.floor(10 * 0.3) && y === Math.floor(10 * 0.6)) ||
-          (x === Math.floor(10 * 0.5) && y === Math.floor(10 * 0.7)) ||
-          (x === Math.floor(10 * 0.7) && y === Math.floor(10 * 0.8))
-        ) {
-          assert.equal(terrainId, GOLD_TERRAIN_ID);
-        } else {
-          assert.equal(terrainId, STONE_TERRAIN_ID);
-        }
+        assert.equal(terrainId, STONE_TERRAIN_ID);
       }
     });
   });
+});
+
+test("player manager spawns on surface, moves, and auto-lands after jump", async () => {
+  const players = new MapSchema<PlayerState>();
+  const manager = createPlayerManager({
+    worldWidth: WORLD_WIDTH,
+    surfaceY: PLAYER_SURFACE_ROW,
+    jumpHeight: 2,
+    jumpDurationMs: 15
+  });
+
+  const spawned = manager.spawn(players, "client-1");
+  assert.equal(spawned.x, 0);
+  assert.equal(spawned.y, PLAYER_SURFACE_ROW);
+  assert.equal(spawned.isJumping, false);
+
+  manager.move(players, "client-1", 1);
+  assert.equal(players.get("client-1")?.x, 1);
+
+  manager.jump(players, "client-1");
+  assert.equal(players.get("client-1")?.isJumping, true);
+  assert.equal(players.get("client-1")?.y, Math.max(0, PLAYER_SURFACE_ROW - 2));
+
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.equal(players.get("client-1")?.isJumping, false);
+  assert.equal(players.get("client-1")?.y, PLAYER_SURFACE_ROW);
+
+  manager.dispose();
 });
 
 async function run() {

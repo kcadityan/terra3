@@ -3,5 +3,6 @@ export {
   WorldRowState,
   WorldState,
   createWorldRoomClass,
-  registerWorldRoom
+  registerWorldRoom,
+  type WorldRoomDependencies
 } from "./room";
