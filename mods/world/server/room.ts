@@ -14,7 +14,7 @@ export class WorldCellState extends Schema {
   @type("number") declare y: number;
   @type("string") declare terrain: string;
 
-  constructor(x = 0, y = 0, terrain = "Empty") {
+  constructor(x = 0, y = 0, terrain = "Dirt") {
     super();
     this.x = x;
     this.y = y;

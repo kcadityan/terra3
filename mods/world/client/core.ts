@@ -1,6 +1,6 @@
 import { Client as ColyseusClient, Room } from "colyseus.js";
 
-import type { WorldSnapshot } from "../shared/world";
+import type { WorldSnapshot, WorldTerrain } from "../shared/world";
 
 type WorldStateMessage = {
   width: number;
@@ -43,7 +43,11 @@ export class WorldClient {
       width: state.width,
       height: state.height,
       cells: state.rows.map((row) =>
-        row.cells.map((cell) => ({ x: cell.x, y: cell.y, terrain: cell.terrain as "Empty" }))
+        row.cells.map((cell) => ({
+          x: cell.x,
+          y: cell.y,
+          terrain: cell.terrain as WorldTerrain
+        }))
       )
     };
   }

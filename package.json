@@ -2,7 +2,6 @@
   "name": "my-kernel",
   "version": "0.0.1",
   "scripts": {
-    "dev": "ts-node main.ts",
     "test": "ts-node tests/kernel.test.ts",
     "server": "ts-node engine/server/index.ts",
     "client": "vite --config client/vite.config.ts"

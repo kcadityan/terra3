@@ -1,3 +1,4 @@
+//dead code
 import { Kernel } from "./engine/kernel";
 import { initGold, extendGold } from "./mods/gold/server";
 import { initWorld } from "./mods/world/server";

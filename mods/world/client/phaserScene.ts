@@ -56,9 +56,9 @@ export class WorldScene extends Phaser.Scene {
 
   private terrainColor(terrain: string): number {
     switch (terrain) {
-      case "Empty":
+      case "Dirt":
       default:
-        return 0x1e1e1e;
+        return 0x6b4f2a;
     }
   }
 }

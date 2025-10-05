@@ -4,7 +4,7 @@ import {
   WORLD_HEIGHT,
   WORLD_WIDTH,
   WorldSnapshot,
-  createEmptyGrid
+  createFilledGrid
 } from "../shared/world";
 
 export function initWorld(kernel: Kernel) {
@@ -21,6 +21,6 @@ export function createWorldSnapshot(): WorldSnapshot {
   return {
     width: WORLD_WIDTH,
     height: WORLD_HEIGHT,
-    cells: createEmptyGrid()
+    cells: createFilledGrid()
   };
 }

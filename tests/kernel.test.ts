@@ -72,7 +72,7 @@ test("world mod generates an empty 10x10 grid", () => {
     assert.ok(Array.isArray(row));
     assert.equal((row as unknown[]).length, 10);
     (row as unknown[]).forEach((cell: unknown, x: number) => {
-      assert.deepEqual(cell, { x, y, terrain: "Empty" });
+      assert.deepEqual(cell, { x, y, terrain: "Dirt" });
     });
   });
 });
