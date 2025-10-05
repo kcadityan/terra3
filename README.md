@@ -37,6 +37,12 @@ npm run server
 
 Once running, the server exposes the `world` room which publishes a 10x10 empty world grid over Colyseus. The client-side world module connects with `WorldClient` (protocol-only) or `createWorldGame` (Phaser renderer).
 
+### Terrain mods and world plan
+
+- Terrain materials (grass, dirt, stone, gold) live under `mods/terrain/**` and register their own textures/metadata with the shared registry.
+- The world module only stitches together a layout supplied by `engine/world/plan/defaultPlan.ts`. Replace that plan (or inject a new one) to change block counts and placement without modifying the mods themselves.
+- Each terrain mod owns its assets in its `textures/` directory, so contributors can ship new looks or entirely new materials independently of world generation.
+
 ## Viewing the world grid in a browser
 
 1. Start the Colyseus server (see above).

@@ -1,13 +1,15 @@
 import { Client as ColyseusClient, Room } from "colyseus.js";
 
-import type { WorldSnapshot, WorldTerrain } from "../shared/world";
+import type { TerrainDefinition, TerrainId } from "../shared/terrain";
+import type { WorldSnapshot } from "../shared/world";
 
 type WorldStateMessage = {
   width: number;
   height: number;
   rows: Array<{
-    cells: Array<{ x: number; y: number; terrain: string }>;
+    cells: Array<string>;
   }>;
+  palette: Array<TerrainDefinition>;
 };
 
 type Listener = (snapshot: WorldSnapshot) => void;
@@ -42,13 +44,13 @@ export class WorldClient {
     return {
       width: state.width,
       height: state.height,
-      cells: state.rows.map((row) =>
-        row.cells.map((cell) => ({
-          x: cell.x,
-          y: cell.y,
-          terrain: cell.terrain as WorldTerrain
-        }))
-      )
+      cells: state.rows.map((row) => row.cells.map((terrainId) => terrainId as TerrainId)),
+      palette: state.palette.map((entry) => ({
+        id: entry.id,
+        name: entry.name,
+        texturePath: entry.texturePath,
+        color: entry.color
+      }))
     };
   }
 }

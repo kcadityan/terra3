@@ -8,6 +8,7 @@ export class WorldScene extends Phaser.Scene {
   private readonly tileSize: number;
   private unsubscribe: (() => void) | undefined;
   private graphics: Phaser.GameObjects.Graphics | undefined;
+  private paletteColors = new Map<string, number>();
 
   constructor(worldClient: WorldClient, tileSize = 32) {
     super({ key: "WorldScene" });
@@ -38,6 +39,8 @@ export class WorldScene extends Phaser.Scene {
   private drawGrid(snapshot: WorldSnapshot): void {
     if (!this.graphics) return;
 
+    this.updatePalette(snapshot);
+
     const { width, height, cells } = snapshot;
     const g = this.graphics;
     g.clear();
@@ -45,8 +48,8 @@ export class WorldScene extends Phaser.Scene {
 
     for (let y = 0; y < height; y += 1) {
       for (let x = 0; x < width; x += 1) {
-        const cell = cells[y]?.[x];
-        const color = this.terrainColor(cell?.terrain ?? "Empty");
+        const terrainId = cells[y]?.[x] ?? "";
+        const color = this.terrainColor(terrainId);
         g.fillStyle(color, 0.6);
         g.fillRect(x * this.tileSize, y * this.tileSize, this.tileSize, this.tileSize);
         g.strokeRect(x * this.tileSize, y * this.tileSize, this.tileSize, this.tileSize);
@@ -54,12 +57,15 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
-  private terrainColor(terrain: string): number {
-    switch (terrain) {
-      case "Dirt":
-      default:
-        return 0x6b4f2a;
-    }
+  private updatePalette(snapshot: WorldSnapshot): void {
+    this.paletteColors.clear();
+    snapshot.palette.forEach((entry) => {
+      this.paletteColors.set(entry.id, entry.color);
+    });
+  }
+
+  private terrainColor(terrainId: string): number {
+    return this.paletteColors.get(terrainId) ?? 0x1e1e1e;
   }
 }
 

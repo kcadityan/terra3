@@ -3,13 +3,22 @@ import express from "express";
 import { Server } from "colyseus";
 
 import { registerWorldRoom } from "../../mods/world/server/colyseus";
+import { createTerrainRegistry } from "../../mods/world/shared/terrain";
+import { registerBaseTerrain } from "../../mods/terrain";
+import { createDefaultWorldPlan } from "../world/plan/defaultPlan";
 
 export function createServer(port = Number(process.env.PORT ?? 2567)) {
   const app = express();
   const httpServer = http.createServer(app);
   const gameServer = new Server({ server: httpServer });
 
-  registerWorldRoom(gameServer);
+  const terrainRegistry = createTerrainRegistry();
+  registerBaseTerrain(terrainRegistry);
+
+  registerWorldRoom(gameServer, {
+    terrainRegistry,
+    planProvider: () => createDefaultWorldPlan(terrainRegistry)
+  });
 
   const ready = gameServer
     .listen(port)

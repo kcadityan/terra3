@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { Kernel, Command, Event } from "../engine/kernel";
-import { initWorld } from "../mods/world/server";
+import { createDefaultWorldPlan } from "../engine/world/plan/defaultPlan";
+import { registerBaseTerrain } from "../mods/terrain";
+import { GRASS_TERRAIN_ID } from "../mods/terrain/grass";
+import { DIRT_TERRAIN_ID } from "../mods/terrain/dirt";
+import { STONE_TERRAIN_ID } from "../mods/terrain/stone";
+import { GOLD_TERRAIN_ID } from "../mods/terrain/gold";
+import { createTerrainRegistry } from "../mods/world/shared/terrain";
+import { createWorldService } from "../mods/world/server";
 
 type TestCase = { name: string; fn: () => void | Promise<void> };
 
@@ -55,9 +62,17 @@ test("register overwrites prior handler for same command", () => {
   assert.deepEqual(kernel.getLog(), [{ type: "Replacement", v: 2, payload: {} }]);
 });
 
-test("world mod generates an empty 10x10 grid", () => {
+test("world module uses terrain registry and plan to generate grid", () => {
   const kernel = new Kernel();
-  initWorld(kernel);
+  const terrainRegistry = createTerrainRegistry();
+  registerBaseTerrain(terrainRegistry);
+
+  const worldService = createWorldService({
+    terrainRegistry,
+    planProvider: () => createDefaultWorldPlan(terrainRegistry)
+  });
+
+  worldService.registerKernel(kernel);
 
   const events = kernel.dispatch({ type: "GenerateWorld", payload: {} });
   assert.equal(events.length, 1);
@@ -68,11 +83,36 @@ test("world mod generates an empty 10x10 grid", () => {
   assert.equal(world.payload.width, 10);
   assert.equal(world.payload.height, 10);
   assert.equal(world.payload.cells.length, 10);
+
+  const paletteIds = world.payload.palette.map((entry: unknown) => (entry as { id: string }).id);
+  [GRASS_TERRAIN_ID, DIRT_TERRAIN_ID, STONE_TERRAIN_ID, GOLD_TERRAIN_ID].forEach((id) => {
+    assert.ok(
+      paletteIds.includes(id),
+      `expected palette to contain terrain '${id}' but only had ${paletteIds.join(", ")}`
+    );
+  });
+
   world.payload.cells.forEach((row: unknown, y: number) => {
     assert.ok(Array.isArray(row));
     assert.equal((row as unknown[]).length, 10);
-    (row as unknown[]).forEach((cell: unknown, x: number) => {
-      assert.deepEqual(cell, { x, y, terrain: "Dirt" });
+    (row as unknown[]).forEach((terrainId: unknown, x: number) => {
+      assert.equal(typeof terrainId, "string");
+
+      if (y === 0) {
+        assert.equal(terrainId, GRASS_TERRAIN_ID);
+      } else if (y <= 2) {
+        assert.equal(terrainId, DIRT_TERRAIN_ID);
+      } else {
+        if (
+          (x === Math.floor(10 * 0.3) && y === Math.floor(10 * 0.6)) ||
+          (x === Math.floor(10 * 0.5) && y === Math.floor(10 * 0.7)) ||
+          (x === Math.floor(10 * 0.7) && y === Math.floor(10 * 0.8))
+        ) {
+          assert.equal(terrainId, GOLD_TERRAIN_ID);
+        } else {
+          assert.equal(terrainId, STONE_TERRAIN_ID);
+        }
+      }
     });
   });
 });

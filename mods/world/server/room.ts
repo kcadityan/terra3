@@ -2,98 +2,98 @@ import { Room, Server } from "colyseus";
 import { ArraySchema, Schema, type } from "@colyseus/schema";
 
 import { Kernel } from "../../../engine/kernel";
-import {
-  WORLD_EVENTS,
-  WorldGeneratedEvent,
-  WorldSnapshot
-} from "../shared/world";
-import { createWorldSnapshot, initWorld } from "./logic";
+import { WORLD_EVENTS, type WorldSnapshot } from "../shared/world";
+import type { WorldModuleDependencies } from "./logic";
+import { createWorldService } from "./logic";
 
-export class WorldCellState extends Schema {
-  @type("number") declare x: number;
-  @type("number") declare y: number;
-  @type("string") declare terrain: string;
-
-  constructor(x = 0, y = 0, terrain = "Dirt") {
-    super();
-    this.x = x;
-    this.y = y;
-    this.terrain = terrain;
-  }
+export class TerrainDefinitionState extends Schema {
+  @type("string") declare id: string;
+  @type("string") declare name: string;
+  @type("string") declare texturePath: string;
+  @type("number") declare color: number;
 }
 
 export class WorldRowState extends Schema {
-  @type([WorldCellState])
-  declare cells: ArraySchema<WorldCellState>;
+  @type(["string"]) declare cells: ArraySchema<string>;
 
   constructor() {
     super();
-    this.cells = new ArraySchema<WorldCellState>();
+    this.cells = new ArraySchema<string>();
   }
 }
 
 export class WorldState extends Schema {
-  @type("number")
-  declare width: number;
+  @type("number") declare width: number;
+  @type("number") declare height: number;
+  @type([WorldRowState]) declare rows: ArraySchema<WorldRowState>;
+  @type([TerrainDefinitionState]) declare palette: ArraySchema<TerrainDefinitionState>;
 
-  @type("number")
-  declare height: number;
-
-  @type([WorldRowState])
-  declare rows: ArraySchema<WorldRowState>;
-
-  constructor(snapshot: WorldSnapshot = createWorldSnapshot()) {
+  constructor(snapshot: WorldSnapshot) {
     super();
     this.width = snapshot.width;
     this.height = snapshot.height;
     this.rows = new ArraySchema<WorldRowState>();
+    this.palette = new ArraySchema<TerrainDefinitionState>();
   }
 }
 
-export class WorldRoom extends Room<WorldState> {
-  private kernel: Kernel | undefined;
+export function createWorldRoomClass(deps: WorldModuleDependencies) {
+  return class WorldRoom extends Room<WorldState> {
+    private kernel: Kernel | undefined;
+    private readonly service = createWorldService(deps);
 
-  onCreate(): void {
-    this.kernel = new Kernel();
-    initWorld(this.kernel);
+    onCreate(): void {
+      this.kernel = new Kernel();
+      this.service.registerKernel(this.kernel);
 
-    this.setState(new WorldState());
-    this.applyWorld(this.generateWorld());
-
-    this.onMessage("regenerate", () => {
       const snapshot = this.generateWorld();
+      this.setState(new WorldState(snapshot));
       this.applyWorld(snapshot);
-    });
-  }
 
-  private generateWorld(): WorldSnapshot {
-    if (!this.kernel) {
-      return createWorldSnapshot();
+      this.onMessage("regenerate", () => {
+        const latest = this.generateWorld();
+        this.applyWorld(latest);
+      });
     }
 
-    const events = this.kernel.dispatch({ type: "GenerateWorld", payload: {} });
-    const worldEvent = events.find((evt): evt is WorldGeneratedEvent => evt.type === WORLD_EVENTS.Generated);
-    return worldEvent?.payload ?? createWorldSnapshot();
-  }
+    private applyWorld(snapshot: WorldSnapshot): void {
+      this.state.width = snapshot.width;
+      this.state.height = snapshot.height;
 
-  private applyWorld(snapshot: WorldSnapshot): void {
-    const { width, height, cells } = snapshot;
-    this.state.width = width;
-    this.state.height = height;
-
-    this.state.rows.splice(0, this.state.rows.length);
-
-    cells.forEach((row) => {
-      const rowState = new WorldRowState();
-      rowState.cells.splice(0, rowState.cells.length);
-      row.forEach((cell) => {
-        rowState.cells.push(new WorldCellState(cell.x, cell.y, cell.terrain));
+      this.state.rows.splice(0, this.state.rows.length);
+      snapshot.cells.forEach((row) => {
+        const rowState = new WorldRowState();
+        rowState.cells.splice(0, rowState.cells.length);
+        row.forEach((terrainId) => {
+          rowState.cells.push(terrainId);
+        });
+        this.state.rows.push(rowState);
       });
-      this.state.rows.push(rowState);
-    });
-  }
+
+      this.state.palette.splice(0, this.state.palette.length);
+      snapshot.palette.forEach((def) => {
+        const entry = new TerrainDefinitionState();
+        entry.id = def.id;
+        entry.name = def.name;
+        entry.texturePath = def.texturePath;
+        entry.color = def.color;
+        this.state.palette.push(entry);
+      });
+    }
+    
+    private generateWorld(): WorldSnapshot {
+      if (!this.kernel) {
+        return this.service.generateSnapshot();
+      }
+
+      const events = this.kernel.dispatch({ type: "GenerateWorld", payload: {} });
+      const worldEvent = events.find((evt) => evt.type === WORLD_EVENTS.Generated);
+      return worldEvent?.payload ?? this.service.generateSnapshot();
+    }
+  };
 }
 
-export function registerWorldRoom(server: Server): void {
+export function registerWorldRoom(server: Server, deps: WorldModuleDependencies): void {
+  const WorldRoom = createWorldRoomClass(deps);
   server.define("world", WorldRoom);
 }

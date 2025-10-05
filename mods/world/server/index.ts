@@ -1,1 +1,1 @@
-export { initWorld, createWorldSnapshot } from "./logic";
+export { createWorldService, type TerrainPlan, type WorldModuleDependencies } from "./logic";

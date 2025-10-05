@@ -1,1 +1,7 @@
-export { WorldCellState, WorldRowState, WorldState, WorldRoom, registerWorldRoom } from "./room";
+export {
+  TerrainDefinitionState,
+  WorldRowState,
+  WorldState,
+  createWorldRoomClass,
+  registerWorldRoom
+} from "./room";

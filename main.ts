@@ -1,12 +1,23 @@
-//dead code
 import { Kernel } from "./engine/kernel";
+import { createDefaultWorldPlan } from "./engine/world/plan/defaultPlan";
 import { initGold, extendGold } from "./mods/gold/server";
-import { initWorld } from "./mods/world/server";
+import { registerBaseTerrain } from "./mods/terrain";
+import { createTerrainRegistry } from "./mods/world/shared/terrain";
+import { createWorldService } from "./mods/world/server";
 
 const kernel = new Kernel();
 initGold(kernel);
 extendGold(kernel);
-initWorld(kernel);
+
+const terrainRegistry = createTerrainRegistry();
+registerBaseTerrain(terrainRegistry);
+
+const worldService = createWorldService({
+  terrainRegistry,
+  planProvider: () => createDefaultWorldPlan(terrainRegistry)
+});
+
+worldService.registerKernel(kernel);
 
 // Try dispatching
 kernel.dispatch({ type: "MineGold", payload: { player: "Ashok" } });
