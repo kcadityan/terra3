@@ -1,6 +1,6 @@
 import "./style.css";
 
-import { WorldClient, createWorldGame } from "../../mods/world/client";
+import { WorldClient, createWorldGame } from "@mods/world/client";
 
 type WorldConfig = {
   endpoint: string;

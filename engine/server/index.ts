@@ -2,12 +2,12 @@ import http from "http";
 import express from "express";
 import { Server } from "colyseus";
 
-import { registerWorldRoom } from "../../mods/world/server/colyseus";
-import { createTerrainRegistry } from "../../mods/world/shared/terrain";
-import { WORLD_WIDTH } from "../../mods/world/shared/world";
-import { registerBaseTerrain } from "../../mods/terrain";
-import { createDefaultWorldPlan, PLAYER_SURFACE_ROW } from "../world/plan/defaultPlan";
-import { createPlayerManager as createPlayerManagerFactory } from "../../mods/player/server";
+import { registerWorldRoom } from "@mods/world/server/colyseus";
+import { createTerrainRegistry } from "@mods/world/shared/terrain";
+import { WORLD_WIDTH } from "@mods/world/shared/world";
+import { registerBaseTerrain } from "@mods/terrain";
+import { createDefaultWorldPlan, PLAYER_SURFACE_ROW } from "@engine/world/plan/defaultPlan";
+import { createPlayerManager as createPlayerManagerFactory } from "@mods/player/server";
 
 export function createServer(port = Number(process.env.PORT ?? 2567)) {
   const app = express();

@@ -1,6 +1,6 @@
-import type { Event } from "../../../engine/kernel";
+import type { Event } from "@engine/kernel";
 import type { TerrainDefinition, TerrainId } from "./terrain";
-import type { PlayerSnapshot } from "../../player/shared/player";
+import type { PlayerSnapshot } from "@mods/player/shared/player";
 
 export const WORLD_WIDTH = 20;
 export const WORLD_HEIGHT = 16;

@@ -1,10 +1,10 @@
-import { WORLD_HEIGHT, WORLD_WIDTH } from "../../../mods/world/shared/world";
-import type { TerrainId, TerrainRegistry } from "../../../mods/world/shared/terrain";
-import { AIR_TERRAIN_ID } from "../../../mods/terrain/air";
-import { GRASS_TERRAIN_ID } from "../../../mods/terrain/grass";
-import { DIRT_TERRAIN_ID } from "../../../mods/terrain/dirt";
-import { STONE_TERRAIN_ID } from "../../../mods/terrain/stone";
-import { GOLD_TERRAIN_ID } from "../../../mods/terrain/gold";
+import { WORLD_HEIGHT, WORLD_WIDTH } from "@mods/world/shared/world";
+import type { TerrainId, TerrainRegistry } from "@mods/world/shared/terrain";
+import { AIR_TERRAIN_ID } from "@mods/terrain/air";
+import { GRASS_TERRAIN_ID } from "@mods/terrain/grass";
+import { DIRT_TERRAIN_ID } from "@mods/terrain/dirt";
+import { STONE_TERRAIN_ID } from "@mods/terrain/stone";
+import { GOLD_TERRAIN_ID } from "@mods/terrain/gold";
 
 export const AIR_LAYERS = 4;
 export const DIRT_LAYERS = 4;

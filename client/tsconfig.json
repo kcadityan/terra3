@@ -9,8 +9,23 @@
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "types": ["vite/client"],
-    "baseUrl": "."
+    "types": [
+      "vite/client"
+    ],
+    "baseUrl": ".",
+    "paths": {
+      "@mods/*": [
+        "../mods/*"
+      ],
+      "@engine/*": [
+        "../engine/*"
+      ],
+      "@shared/*": [
+        "../engine/shared/*"
+      ]
+    }
   },
-  "include": ["src"]
+  "include": [
+    "src"
+  ]
 }
