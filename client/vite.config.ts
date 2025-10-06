@@ -6,7 +6,9 @@ export default defineConfig({
   resolve: {
     alias: {
       "@client": path.resolve(__dirname, "src"),
-      "@mods": path.resolve(__dirname, "../mods")
+      "@mods": path.resolve(__dirname, "../mods"),
+      "@engine": path.resolve(__dirname, "../engine"),
+      "@shared": path.resolve(__dirname, "../engine/shared")
     }
   },
   server: {

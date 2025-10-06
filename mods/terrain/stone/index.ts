@@ -1,4 +1,4 @@
-import type { TerrainRegistry } from "../../world/shared/terrain";
+import type { TerrainRegistry } from "@mods/world/shared/terrain";
 
 export const STONE_TERRAIN_ID = "terrain.stone" as const;
 

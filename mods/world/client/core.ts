@@ -2,7 +2,7 @@ import { Client as ColyseusClient, Room } from "colyseus.js";
 
 import type { TerrainDefinition, TerrainId } from "../shared/terrain";
 import type { WorldStateView } from "../shared/world";
-import type { PlayerSnapshot } from "../../player/shared/player";
+import type { PlayerSnapshot } from "@mods/player/shared/player";
 
 type WorldStateMessage = {
   width: number;

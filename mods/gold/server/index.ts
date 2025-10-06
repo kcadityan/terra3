@@ -1,4 +1,4 @@
-import { Kernel, Command, Event } from "../../../engine/kernel";
+import { Kernel, Command, Event } from "@engine/kernel";
 
 export function initGold(kernel: Kernel) {
   kernel.register("MineGold", (cmd: Command): Event[] => [

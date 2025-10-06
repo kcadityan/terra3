@@ -1,4 +1,4 @@
-import { Kernel, Command } from "../../../engine/kernel";
+import { Kernel, Command } from "@engine/kernel";
 import type { TerrainRegistry, TerrainId } from "../shared/terrain";
 import { WORLD_EVENTS, WORLD_HEIGHT, WORLD_WIDTH, type WorldSnapshot } from "../shared/world";
 

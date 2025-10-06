@@ -2,12 +2,12 @@ import { Room, Server } from "colyseus";
 import type { Client } from "colyseus";
 import { ArraySchema, Schema, type, MapSchema } from "@colyseus/schema";
 
-import { Kernel } from "../../../engine/kernel";
+import { Kernel } from "@engine/kernel";
 import { WORLD_EVENTS, type WorldSnapshot } from "../shared/world";
 import type { WorldModuleDependencies } from "./logic";
 import { createWorldService } from "./logic";
-import type { PlayerManager } from "../../player/server";
-import { PlayerState } from "../../player/server";
+import type { PlayerManager } from "@mods/player/server";
+import { PlayerState } from "@mods/player/server";
 
 export class TerrainDefinitionState extends Schema {
   @type("string") declare id: string;
