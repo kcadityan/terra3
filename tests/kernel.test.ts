@@ -19,7 +19,7 @@ import { GRASS_TERRAIN_ID } from "../mods/terrain/grass";
 import { DIRT_TERRAIN_ID } from "../mods/terrain/dirt";
 import { STONE_TERRAIN_ID } from "../mods/terrain/stone";
 import { GOLD_TERRAIN_ID } from "../mods/terrain/gold";
-import { createPlayerManager, PlayerState } from "../mods/player/server";
+import { initPlayerModule } from "../mods/player/server";
 
 type TestCase = { name: string; fn: () => void | Promise<void> };
 
@@ -84,7 +84,7 @@ test("world module uses terrain registry and plan to generate grid", () => {
     planProvider: () => createDefaultWorldPlan(terrainRegistry)
   });
 
-  worldService.registerKernel(kernel);
+  worldService.registerRuntime(kernel);
 
   const events = kernel.dispatch({ type: "GenerateWorld", payload: {} });
   assert.equal(events.length, 1);
@@ -133,13 +133,18 @@ test("world module uses terrain registry and plan to generate grid", () => {
 });
 
 test("player manager spawns on surface, moves, and auto-lands after jump", async () => {
-  const players = new MapSchema<PlayerState>();
-  const manager = createPlayerManager({
-    worldWidth: WORLD_WIDTH,
-    surfaceY: PLAYER_SURFACE_ROW,
-    jumpHeight: 2,
-    jumpDurationMs: 15
+  const playerApi = initPlayerModule({
+    config: {
+      worldWidth: WORLD_WIDTH,
+      surfaceY: PLAYER_SURFACE_ROW,
+      jumpHeight: 2,
+      jumpDurationMs: 15
+    }
   });
+
+  const PlayerStateCtor = playerApi.stateCtor;
+  const players = new MapSchema<InstanceType<typeof PlayerStateCtor>>();
+  const manager = playerApi.createRoomRuntime();
 
   const spawned = manager.spawn(players, "client-1");
   assert.equal(spawned.x, 0);

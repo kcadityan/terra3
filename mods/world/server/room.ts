@@ -2,12 +2,16 @@ import { Room, Server } from "colyseus";
 import type { Client } from "colyseus";
 import { ArraySchema, Schema, type, MapSchema } from "@colyseus/schema";
 
-import { Kernel } from "@engine/kernel";
+import type {
+  KernelFactory,
+  PlayerAPI,
+  PlayerRoomRuntime,
+  PlayerStateCtor,
+  CommandRuntime
+} from "@engine/shared/tokens";
 import { WORLD_EVENTS, type WorldSnapshot } from "../shared/world";
 import type { WorldModuleDependencies } from "./logic";
 import { createWorldService } from "./logic";
-import type { PlayerManager } from "@mods/player/server";
-import { PlayerState } from "@mods/player/server";
 
 export class TerrainDefinitionState extends Schema {
   @type("string") declare id: string;
@@ -25,36 +29,51 @@ export class WorldRowState extends Schema {
   }
 }
 
-export class WorldState extends Schema {
-  @type("number") declare width: number;
-  @type("number") declare height: number;
-  @type([WorldRowState]) declare rows: ArraySchema<WorldRowState>;
-  @type([TerrainDefinitionState]) declare palette: ArraySchema<TerrainDefinitionState>;
-  @type({ map: PlayerState }) declare players: MapSchema<PlayerState>;
+export function createWorldStateClass<TPlayerState extends Schema>(
+  playerStateCtor: PlayerStateCtor<TPlayerState>
+) {
+  class WorldState extends Schema {
+    @type("number") declare width: number;
+    @type("number") declare height: number;
+    @type([WorldRowState]) declare rows: ArraySchema<WorldRowState>;
+    @type([TerrainDefinitionState]) declare palette: ArraySchema<TerrainDefinitionState>;
+    @type({ map: playerStateCtor }) declare players: MapSchema<TPlayerState>;
 
-  constructor(snapshot: WorldSnapshot) {
-    super();
-    this.width = snapshot.width;
-    this.height = snapshot.height;
-    this.rows = new ArraySchema<WorldRowState>();
-    this.palette = new ArraySchema<TerrainDefinitionState>();
-    this.players = new MapSchema<PlayerState>();
+    constructor(snapshot: WorldSnapshot) {
+      super();
+      this.width = snapshot.width;
+      this.height = snapshot.height;
+      this.rows = new ArraySchema<WorldRowState>();
+      this.palette = new ArraySchema<TerrainDefinitionState>();
+      this.players = new MapSchema<TPlayerState>();
+    }
   }
+
+  return WorldState;
 }
 
-export interface WorldRoomDependencies extends WorldModuleDependencies {
-  createPlayerManager: () => PlayerManager;
+export interface WorldRoomDependencies<TPlayerState extends Schema = Schema>
+  extends WorldModuleDependencies {
+  players: PlayerAPI<TPlayerState>;
+  createRuntime: KernelFactory;
 }
 
-export function createWorldRoomClass(deps: WorldRoomDependencies) {
-  return class WorldRoom extends Room<WorldState> {
-    private kernel: Kernel | undefined;
-    private readonly service = createWorldService(deps);
-    private readonly playerManager = deps.createPlayerManager();
+export function createWorldRoomClass<TPlayerState extends Schema>(
+  deps: WorldRoomDependencies<TPlayerState>
+) {
+  const { players, createRuntime, terrainRegistry, planProvider } = deps;
+  const service = createWorldService({ terrainRegistry, planProvider });
+  const WorldState = createWorldStateClass(players.stateCtor);
+  type RoomState = InstanceType<typeof WorldState>;
+  type PlayerRuntime = PlayerRoomRuntime<TPlayerState>;
+
+  return class WorldRoom extends Room<RoomState> {
+    private runtime: CommandRuntime | undefined;
+    private readonly playerRuntime: PlayerRuntime = players.createRoomRuntime();
 
     onCreate(): void {
-      this.kernel = new Kernel();
-      this.service.registerKernel(this.kernel);
+      this.runtime = createRuntime();
+      service.registerRuntime(this.runtime);
 
       const snapshot = this.generateWorld();
       this.setState(new WorldState(snapshot));
@@ -69,24 +88,24 @@ export function createWorldRoomClass(deps: WorldRoomDependencies) {
         if (!message || (message.direction !== -1 && message.direction !== 1)) {
           return;
         }
-        this.playerManager.move(this.state.players, client.sessionId, message.direction);
+        this.playerRuntime.move(this.state.players, client.sessionId, message.direction);
       });
 
       this.onMessage("player:jump", (client) => {
-        this.playerManager.jump(this.state.players, client.sessionId);
+        this.playerRuntime.jump(this.state.players, client.sessionId);
       });
     }
 
     onJoin(client: Client): void {
-      this.playerManager.spawn(this.state.players, client.sessionId);
+      this.playerRuntime.spawn(this.state.players, client.sessionId);
     }
 
     onLeave(client: Client): void {
-      this.playerManager.remove(this.state.players, client.sessionId);
+      this.playerRuntime.remove(this.state.players, client.sessionId);
     }
 
     onDispose(): void {
-      this.playerManager.dispose();
+      this.playerRuntime.dispose();
     }
 
     private applyWorld(snapshot: WorldSnapshot): void {
@@ -115,18 +134,21 @@ export function createWorldRoomClass(deps: WorldRoomDependencies) {
     }
 
     private generateWorld(): WorldSnapshot {
-      if (!this.kernel) {
-        return this.service.generateSnapshot();
+      if (!this.runtime) {
+        return service.generateSnapshot();
       }
 
-      const events = this.kernel.dispatch({ type: "GenerateWorld", payload: {} });
+      const events = this.runtime.dispatch({ type: "GenerateWorld", payload: {} });
       const worldEvent = events.find((evt) => evt.type === WORLD_EVENTS.Generated);
-      return worldEvent?.payload ?? this.service.generateSnapshot();
+      return worldEvent?.payload ?? service.generateSnapshot();
     }
   };
 }
 
-export function registerWorldRoom(server: Server, deps: WorldRoomDependencies): void {
+export function registerWorldRoom<TPlayerState extends Schema>(
+  server: Server,
+  deps: WorldRoomDependencies<TPlayerState>
+): void {
   const WorldRoom = createWorldRoomClass(deps);
   server.define("world", WorldRoom);
 }

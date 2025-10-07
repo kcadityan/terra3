@@ -1,7 +1,7 @@
 export {
   TerrainDefinitionState,
   WorldRowState,
-  WorldState,
+  createWorldStateClass,
   createWorldRoomClass,
   registerWorldRoom,
   type WorldRoomDependencies

@@ -1,5 +1,6 @@
 import { MapSchema, Schema, type } from "@colyseus/schema";
 
+import type { PlayerRoomRuntime } from "@engine/shared/tokens";
 import type { PlayerSnapshot, PlayerId } from "../shared/player";
 
 export class PlayerState extends Schema {
@@ -28,15 +29,9 @@ export interface PlayerModuleDependencies {
   jumpDurationMs?: number;
 }
 
-export interface PlayerManager {
-  spawn(players: MapSchema<PlayerState>, clientId: PlayerId): PlayerState;
-  remove(players: MapSchema<PlayerState>, clientId: PlayerId): void;
-  move(players: MapSchema<PlayerState>, clientId: PlayerId, direction: -1 | 1): void;
-  jump(players: MapSchema<PlayerState>, clientId: PlayerId): void;
-  dispose(): void;
-}
+export type PlayerManager = PlayerRoomRuntime<PlayerState>;
 
-export function createPlayerManager(deps: PlayerModuleDependencies): PlayerManager {
+export function createPlayerRuntime(deps: PlayerModuleDependencies): PlayerManager {
   const {
     worldWidth,
     surfaceY = 0,
