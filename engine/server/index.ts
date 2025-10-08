@@ -36,14 +36,37 @@ export function createServer(port = Number(process.env.PORT ?? 2567)) {
   const container = new Container();
 
   const eventBus: EventBus = (() => {
-    const subscribers = new Set<(event: Event) => void>();
+    const subscribersByType = new Map<string, Set<(event: Event) => void>>();
+    const wildcardSubscribers = new Set<(event: Event) => void>();
+
+    function ensure(type: string): Set<(event: Event) => void> {
+      if (!subscribersByType.has(type)) {
+        subscribersByType.set(type, new Set());
+      }
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      return subscribersByType.get(type)!;
+    }
+
+    function notify(event: Event): void {
+      const listeners = subscribersByType.get(event.type);
+      listeners?.forEach((listener) => listener(event));
+      wildcardSubscribers.forEach((listener) => listener(event));
+    }
+
     return {
-      publish(event) {
-        subscribers.forEach((handler) => handler(event));
+      publish(eventOrEvents) {
+        const events = Array.isArray(eventOrEvents) ? eventOrEvents : [eventOrEvents];
+        events.forEach((event) => notify(event));
       },
-      subscribe(handler) {
-        subscribers.add(handler);
-        return () => subscribers.delete(handler);
+      subscribe(eventType, handler) {
+        if (eventType === "*") {
+          wildcardSubscribers.add(handler);
+          return () => wildcardSubscribers.delete(handler);
+        }
+
+        const listeners = ensure(eventType);
+        listeners.add(handler);
+        return () => listeners.delete(handler);
       }
     };
   })();
@@ -68,7 +91,7 @@ export function createServer(port = Number(process.env.PORT ?? 2567)) {
   const playerApi = initPlayerModule({ config: playerConfig });
   container.provide(TOKENS.PlayerAPI, playerApi);
 
-  const worldDeps: WorldModuleDeps<PlayerState> = {
+  const worldDeps: WorldModuleDeps = {
     terrainRegistry,
     planProvider: () => createDefaultWorldPlan(terrainRegistry),
     players: container.get(TOKENS.PlayerAPI),

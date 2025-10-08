@@ -1,7 +1,8 @@
-import type { Command } from "@engine/kernel";
+import type { Command, EventDraft } from "@engine/kernel";
 import type { CommandRuntime } from "@engine/shared/tokens";
+import { CommandTypes, EventTypes } from "@engine/shared/contracts";
 import type { TerrainRegistry, TerrainId } from "../shared/terrain";
-import { WORLD_EVENTS, WORLD_HEIGHT, WORLD_WIDTH, type WorldSnapshot } from "../shared/world";
+import { WORLD_HEIGHT, WORLD_WIDTH, type WorldSnapshot } from "../shared/world";
 
 export type TerrainPlan = TerrainId[][];
 
@@ -36,13 +37,27 @@ export function createWorldService(deps: WorldModuleDependencies) {
   }
 
   function registerRuntime(runtime: CommandRuntime) {
-    runtime.register("GenerateWorld", (_cmd: Command) => [
-      {
-        type: WORLD_EVENTS.Generated,
-        v: 1,
-        payload: generateSnapshot()
-      }
-    ]);
+    runtime.register(CommandTypes.GenerateWorld, (_cmd: Command) => {
+      const snapshot = generateSnapshot();
+      const events: EventDraft[] = [];
+
+      snapshot.cells.forEach((row, y) => {
+        row.forEach((material, x) => {
+          events.push({
+            type: EventTypes.BlockSet,
+            payload: {
+              position: { x, y },
+              material
+            },
+            meta: {
+              aggId: `block:${x},${y}`
+            }
+          });
+        });
+      });
+
+      return events;
+    });
   }
 
   return {

@@ -1,13 +1,34 @@
-import { Kernel, Command, Event } from "@engine/kernel";
+import { Kernel, type Command, type EventDraft } from "@engine/kernel";
+import { EventTypes } from "@engine/shared/contracts";
 
 export function initGold(kernel: Kernel) {
-  kernel.register("MineGold", (cmd: Command): Event[] => [
-    { type: "GoldMined", v: 1, payload: { player: cmd.payload.player, grams: 1 } }
+  kernel.register("MineGold", (cmd: Command): EventDraft[] => [
+    {
+      type: EventTypes.ItemGranted,
+      payload: {
+        toEntityId: (cmd.payload as { player: string }).player,
+        item: "gold",
+        quantity: 1
+      },
+      meta: {
+        aggId: `inventory:${(cmd.payload as { player: string }).player}`
+      }
+    }
   ]);
 }
 
 export function extendGold(kernel: Kernel) {
-  kernel.register("SmeltGold", (cmd: Command): Event[] => [
-    { type: "GoldSmelted", v: 1, payload: { player: cmd.payload.player, bars: 1 } }
+  kernel.register("SmeltGold", (cmd: Command): EventDraft[] => [
+    {
+      type: EventTypes.AbilityUsed,
+      payload: {
+        entityId: (cmd.payload as { player: string }).player,
+        ability: "smelt-gold",
+        args: { bars: 1 }
+      },
+      meta: {
+        aggId: `entity:${(cmd.payload as { player: string }).player}`
+      }
+    }
   ]);
 }

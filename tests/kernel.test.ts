@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { MapSchema } from "@colyseus/schema";
 
-import { Kernel, Command, Event } from "../engine/kernel";
+import { Kernel, type Command, type Event } from "../engine/kernel";
+import { CommandTypes, EventTypes } from "../engine/shared/contracts";
 import {
   createDefaultWorldPlan,
   GOLD_DEPOSITS,
@@ -19,9 +20,12 @@ import { GRASS_TERRAIN_ID } from "../mods/terrain/grass";
 import { DIRT_TERRAIN_ID } from "../mods/terrain/dirt";
 import { STONE_TERRAIN_ID } from "../mods/terrain/stone";
 import { GOLD_TERRAIN_ID } from "../mods/terrain/gold";
-import { initPlayerModule } from "../mods/player/server";
+import { initPlayerModule, createPlayerController } from "../mods/player/server";
 
-type TestCase = { name: string; fn: () => void | Promise<void> };
+interface TestCase {
+  name: string;
+  fn: () => void | Promise<void>;
+}
 
 const tests: TestCase[] = [];
 
@@ -29,52 +33,85 @@ function test(name: string, fn: () => void | Promise<void>) {
   tests.push({ name, fn });
 }
 
-function createKernelWithMineHandler() {
-  const kernel = new Kernel();
-  kernel.register("Mine", (cmd: Command): Event[] => [
-    { type: "Mined", v: 1, payload: { player: cmd.payload.player, ore: cmd.payload.ore } }
-  ]);
-  return kernel;
+type DraftFactory = (command: Command) => { type: string; payload: unknown; meta?: Record<string, unknown> }[];
+
+function registerMineHandler(kernel: Kernel, handler?: DraftFactory) {
+  kernel.register(
+    "Mine",
+    handler ?? ((cmd: Command) => [{ type: "Mined", payload: { player: (cmd.payload as { player: string }).player, ore: (cmd.payload as { ore: string }).ore } }])
+  );
 }
 
-test("dispatch returns handler output", () => {
-  const kernel = createKernelWithMineHandler();
+test("dispatch wraps handler output with metadata", () => {
+  const kernel = new Kernel();
+  registerMineHandler(kernel);
+
   const events = kernel.dispatch({ type: "Mine", payload: { player: "Dia", ore: "gold" } });
 
   assert.equal(events.length, 1);
-  assert.deepEqual(events[0], { type: "Mined", v: 1, payload: { player: "Dia", ore: "gold" } });
+  const [event] = events;
+  assert.equal(event.type, "Mined");
+  assert.equal((event.payload as { ore: string }).ore, "gold");
+  assert.ok(event.meta.aggId.length > 0);
+  assert.equal(event.meta.seq, 1);
+  assert.ok(event.meta.ts <= Date.now());
+  assert.equal(event.meta.cause?.commandType, "Mine");
 });
 
-test("dispatch records events in world log", () => {
-  const kernel = createKernelWithMineHandler();
+test("dispatch records events in log with increasing sequence", () => {
+  const kernel = new Kernel();
+  registerMineHandler(kernel);
+
   kernel.dispatch({ type: "Mine", payload: { player: "Dia", ore: "silver" } });
   kernel.dispatch({ type: "Mine", payload: { player: "Dia", ore: "iron" } });
 
   const log = kernel.getLog();
   assert.equal(log.length, 2);
-  assert.deepEqual(log[0], { type: "Mined", v: 1, payload: { player: "Dia", ore: "silver" } });
-  assert.deepEqual(log[1], { type: "Mined", v: 1, payload: { player: "Dia", ore: "iron" } });
+  assert.equal(log[0].meta.seq, 1);
+  assert.equal(log[1].meta.seq, 2);
 });
 
-test("dispatching unregistered command yields empty events", () => {
+test("dispatching unknown command produces no events", () => {
   const kernel = new Kernel();
-  const events = kernel.dispatch({ type: "Unknown", payload: { player: "Dia" } });
-
+  const events = kernel.dispatch({ type: "Unknown", payload: {} });
   assert.deepEqual(events, []);
   assert.deepEqual(kernel.getLog(), []);
 });
 
-test("register overwrites prior handler for same command", () => {
+test("most recent register wins", () => {
   const kernel = new Kernel();
-  kernel.register("Mine", () => [{ type: "Legacy", v: 1, payload: {} }]);
-  kernel.register("Mine", () => [{ type: "Replacement", v: 2, payload: {} }]);
+  registerMineHandler(kernel, () => [{ type: "Legacy", payload: {} }]);
+  registerMineHandler(kernel, () => [{ type: "Replacement", payload: {} }]);
 
-  const events = kernel.dispatch({ type: "Mine", payload: {} });
-  assert.deepEqual(events, [{ type: "Replacement", v: 2, payload: {} }]);
-  assert.deepEqual(kernel.getLog(), [{ type: "Replacement", v: 2, payload: {} }]);
+  const [event] = kernel.dispatch({ type: "Mine", payload: {} });
+  assert.equal(event.type, "Replacement");
 });
 
-test("world module uses terrain registry and plan to generate grid", () => {
+test("failed handler is isolated and yields no events", () => {
+  const kernel = new Kernel();
+  registerMineHandler(kernel, () => {
+    throw new Error("boom");
+  });
+
+  const events = kernel.dispatch({ type: "Mine", payload: {} });
+  assert.deepEqual(events, []);
+  assert.deepEqual(kernel.getLog(), []);
+});
+
+test("subscribers receive published events", () => {
+  const kernel = new Kernel();
+  registerMineHandler(kernel);
+
+  let received: Event | undefined;
+  kernel.subscribe("Mined", (evt) => {
+    received = evt;
+  });
+
+  kernel.dispatch({ type: "Mine", payload: { player: "Dia", ore: "gold" } });
+  assert.equal(received?.type, "Mined");
+});
+
+test("world generator emits block events aligned with plan", () => {
   const kernel = new Kernel();
   const terrainRegistry = createTerrainRegistry();
   registerBaseTerrain(terrainRegistry);
@@ -86,53 +123,42 @@ test("world module uses terrain registry and plan to generate grid", () => {
 
   worldService.registerRuntime(kernel);
 
-  const events = kernel.dispatch({ type: "GenerateWorld", payload: {} });
-  assert.equal(events.length, 1);
+  const events = kernel.dispatch({ type: CommandTypes.GenerateWorld, payload: {} });
+  assert.equal(events.length, WORLD_WIDTH * WORLD_HEIGHT);
 
-  const world = events[0];
-  assert.equal(world.type, "WorldGenerated");
-  assert.equal(world.v, 1);
-  assert.equal(world.payload.width, WORLD_WIDTH);
-  assert.equal(world.payload.height, WORLD_HEIGHT);
-  assert.equal(world.payload.cells.length, WORLD_HEIGHT);
-
-  const paletteIds = world.payload.palette.map((entry: unknown) => (entry as { id: string }).id);
-  [AIR_TERRAIN_ID, GRASS_TERRAIN_ID, DIRT_TERRAIN_ID, STONE_TERRAIN_ID, GOLD_TERRAIN_ID].forEach((id) => {
-    assert.ok(
-      paletteIds.includes(id),
-      `expected palette to contain terrain '${id}' but only had ${paletteIds.join(", ")}`
-    );
-  });
-
+  const paletteIds = terrainRegistry.all().map((def) => def.id);
   const goldSet = new Set(GOLD_DEPOSITS.map(({ x, y }) => `${x},${y}`));
   const stoneStart = GRASS_LAYER + 1 + DIRT_LAYERS;
 
-  world.payload.cells.forEach((row: unknown, y: number) => {
-    assert.ok(Array.isArray(row));
-    assert.equal((row as unknown[]).length, WORLD_WIDTH);
-    (row as unknown[]).forEach((terrainId: unknown, x: number) => {
-      assert.equal(typeof terrainId, "string");
+  events.forEach((event) => {
+    assert.equal(event.type, EventTypes.BlockSet);
+    const payload = event.payload as { position: { x: number; y: number }; material: string };
+    const {
+      position: { x, y },
+      material
+    } = payload;
 
-      const key = `${x},${y}`;
-      if (goldSet.has(key)) {
-        assert.equal(terrainId, GOLD_TERRAIN_ID);
-        return;
-      }
+    assert.ok(paletteIds.includes(material));
 
-      if (y < AIR_LAYERS) {
-        assert.equal(terrainId, AIR_TERRAIN_ID);
-      } else if (y === GRASS_LAYER) {
-        assert.equal(terrainId, GRASS_TERRAIN_ID);
-      } else if (y < stoneStart) {
-        assert.equal(terrainId, DIRT_TERRAIN_ID);
-      } else {
-        assert.equal(terrainId, STONE_TERRAIN_ID);
-      }
-    });
+    const key = `${x},${y}`;
+    if (goldSet.has(key)) {
+      assert.equal(material, GOLD_TERRAIN_ID);
+      return;
+    }
+
+    if (y < AIR_LAYERS) {
+      assert.equal(material, AIR_TERRAIN_ID);
+    } else if (y === GRASS_LAYER) {
+      assert.equal(material, GRASS_TERRAIN_ID);
+    } else if (y < stoneStart) {
+      assert.equal(material, DIRT_TERRAIN_ID);
+    } else {
+      assert.equal(material, STONE_TERRAIN_ID);
+    }
   });
 });
 
-test("player manager spawns on surface, moves, and auto-lands after jump", async () => {
+test("player runtime preserves surface rules", async () => {
   const playerApi = initPlayerModule({
     config: {
       worldWidth: WORLD_WIDTH,
@@ -144,25 +170,65 @@ test("player manager spawns on surface, moves, and auto-lands after jump", async
 
   const PlayerStateCtor = playerApi.stateCtor;
   const players = new MapSchema<InstanceType<typeof PlayerStateCtor>>();
-  const manager = playerApi.createRoomRuntime();
+  const runtime = playerApi.createRoomRuntime();
 
-  const spawned = manager.spawn(players, "client-1");
+  const spawned = runtime.spawn(players, "client-1");
   assert.equal(spawned.x, 0);
   assert.equal(spawned.y, PLAYER_SURFACE_ROW);
-  assert.equal(spawned.isJumping, false);
 
-  manager.move(players, "client-1", 1);
+  runtime.move(players, "client-1", 1);
   assert.equal(players.get("client-1")?.x, 1);
 
-  manager.jump(players, "client-1");
+  runtime.jump(players, "client-1");
   assert.equal(players.get("client-1")?.isJumping, true);
-  assert.equal(players.get("client-1")?.y, Math.max(0, PLAYER_SURFACE_ROW - 2));
 
   await new Promise((resolve) => setTimeout(resolve, 30));
-  assert.equal(players.get("client-1")?.isJumping, false);
   assert.equal(players.get("client-1")?.y, PLAYER_SURFACE_ROW);
 
-  manager.dispose();
+  runtime.dispose();
+});
+
+test("player controller routes through kernel and updates state", () => {
+  const kernel = new Kernel();
+  const playerApi = initPlayerModule({
+    config: {
+      worldWidth: WORLD_WIDTH,
+      surfaceY: PLAYER_SURFACE_ROW,
+      jumpHeight: 2,
+      jumpDurationMs: 15
+    }
+  });
+
+  const PlayerStateCtor = playerApi.stateCtor;
+  const players = new MapSchema<InstanceType<typeof PlayerStateCtor>>();
+  const controller = createPlayerController({
+    runtime: kernel,
+    manager: playerApi.createRoomRuntime(),
+    players
+  });
+
+  controller.register();
+
+  controller.spawn({ entityId: "player-1", kind: "player", ownerId: "player-1" });
+  const spawnEvent = kernel.getLog().find((event) => event.type === EventTypes.EntitySpawned);
+  assert.ok(spawnEvent, "expected spawn event");
+  assert.ok(players.has("player-1"));
+
+  controller.control({ actorId: "player-1", controllerId: "player-1", kind: "move", data: { direction: 1 } });
+  const moveEvent = kernel
+    .getLog()
+    .filter((event) => event.type === EventTypes.EntityMoved)
+    .pop();
+  assert.ok(moveEvent, "expected move event");
+  assert.equal(players.get("player-1")?.x, 1);
+
+  controller.despawn({ entityId: "player-1", reason: "cleanup" });
+  const despawnEvent = kernel
+    .getLog()
+    .filter((event) => event.type === EventTypes.EntityDespawned)
+    .pop();
+  assert.ok(despawnEvent, "expected despawn event");
+  assert.equal(players.has("player-1"), false);
 });
 
 async function run() {

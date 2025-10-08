@@ -2,14 +2,12 @@ import { Room, Server } from "colyseus";
 import type { Client } from "colyseus";
 import { ArraySchema, Schema, type, MapSchema } from "@colyseus/schema";
 
-import type {
-  KernelFactory,
-  PlayerAPI,
-  PlayerRoomRuntime,
-  PlayerStateCtor,
-  CommandRuntime
-} from "@engine/shared/tokens";
-import { WORLD_EVENTS, type WorldSnapshot } from "../shared/world";
+import type { KernelFactory, PlayerAPI, PlayerRoomRuntime, CommandRuntime } from "@engine/shared/tokens";
+import { CommandTypes, EventTypes } from "@engine/shared/contracts";
+import type { Command } from "@engine/kernel";
+import type { ControlInputCommand, DespawnRequestCommand, SpawnRequestCommand } from "@engine/shared/contracts";
+import type { WorldSnapshot } from "../shared/world";
+import { createPlayerController, PlayerState, type PlayerController } from "@mods/player/server";
 import type { WorldModuleDependencies } from "./logic";
 import { createWorldService } from "./logic";
 
@@ -29,15 +27,13 @@ export class WorldRowState extends Schema {
   }
 }
 
-export function createWorldStateClass<TPlayerState extends Schema>(
-  playerStateCtor: PlayerStateCtor<TPlayerState>
-) {
+export function createWorldStateClass(playerStateCtor: typeof PlayerState) {
   class WorldState extends Schema {
     @type("number") declare width: number;
     @type("number") declare height: number;
     @type([WorldRowState]) declare rows: ArraySchema<WorldRowState>;
     @type([TerrainDefinitionState]) declare palette: ArraySchema<TerrainDefinitionState>;
-    @type({ map: playerStateCtor }) declare players: MapSchema<TPlayerState>;
+    @type({ map: playerStateCtor }) declare players: MapSchema<PlayerState>;
 
     constructor(snapshot: WorldSnapshot) {
       super();
@@ -45,31 +41,29 @@ export function createWorldStateClass<TPlayerState extends Schema>(
       this.height = snapshot.height;
       this.rows = new ArraySchema<WorldRowState>();
       this.palette = new ArraySchema<TerrainDefinitionState>();
-      this.players = new MapSchema<TPlayerState>();
+      this.players = new MapSchema<PlayerState>();
     }
   }
 
   return WorldState;
 }
 
-export interface WorldRoomDependencies<TPlayerState extends Schema = Schema>
-  extends WorldModuleDependencies {
-  players: PlayerAPI<TPlayerState>;
+export interface WorldRoomDependencies extends WorldModuleDependencies {
+  players: PlayerAPI<PlayerState>;
   createRuntime: KernelFactory;
 }
 
-export function createWorldRoomClass<TPlayerState extends Schema>(
-  deps: WorldRoomDependencies<TPlayerState>
-) {
+export function createWorldRoomClass(deps: WorldRoomDependencies) {
   const { players, createRuntime, terrainRegistry, planProvider } = deps;
   const service = createWorldService({ terrainRegistry, planProvider });
-  const WorldState = createWorldStateClass(players.stateCtor);
+  const WorldState = createWorldStateClass(players.stateCtor as typeof PlayerState);
   type RoomState = InstanceType<typeof WorldState>;
-  type PlayerRuntime = PlayerRoomRuntime<TPlayerState>;
+  type PlayerRuntime = PlayerRoomRuntime<PlayerState>;
 
   return class WorldRoom extends Room<RoomState> {
     private runtime: CommandRuntime | undefined;
     private readonly playerRuntime: PlayerRuntime = players.createRoomRuntime();
+    private playerController: PlayerController<PlayerState> | undefined;
 
     onCreate(): void {
       this.runtime = createRuntime();
@@ -78,6 +72,15 @@ export function createWorldRoomClass<TPlayerState extends Schema>(
       const snapshot = this.generateWorld();
       this.setState(new WorldState(snapshot));
       this.applyWorld(snapshot);
+
+      if (this.runtime) {
+        this.playerController = createPlayerController({
+          runtime: this.runtime,
+          manager: this.playerRuntime,
+          players: this.state.players
+        });
+        this.playerController.register();
+      }
 
       this.onMessage("regenerate", () => {
         const latest = this.generateWorld();
@@ -88,20 +91,33 @@ export function createWorldRoomClass<TPlayerState extends Schema>(
         if (!message || (message.direction !== -1 && message.direction !== 1)) {
           return;
         }
-        this.playerRuntime.move(this.state.players, client.sessionId, message.direction);
+        this.playerController?.control({
+          actorId: client.sessionId,
+          controllerId: client.sessionId,
+          kind: "move",
+          data: { direction: message.direction }
+        });
       });
 
       this.onMessage("player:jump", (client) => {
-        this.playerRuntime.jump(this.state.players, client.sessionId);
+        this.playerController?.control({
+          actorId: client.sessionId,
+          controllerId: client.sessionId,
+          kind: "jump"
+        });
       });
     }
 
     onJoin(client: Client): void {
-      this.playerRuntime.spawn(this.state.players, client.sessionId);
+      this.playerController?.spawn({
+        entityId: client.sessionId,
+        kind: "player",
+        ownerId: client.sessionId
+      });
     }
 
     onLeave(client: Client): void {
-      this.playerRuntime.remove(this.state.players, client.sessionId);
+      this.playerController?.despawn({ entityId: client.sessionId, reason: "left-room" });
     }
 
     onDispose(): void {
@@ -138,17 +154,39 @@ export function createWorldRoomClass<TPlayerState extends Schema>(
         return service.generateSnapshot();
       }
 
-      const events = this.runtime.dispatch({ type: "GenerateWorld", payload: {} });
-      const worldEvent = events.find((evt) => evt.type === WORLD_EVENTS.Generated);
-      return worldEvent?.payload ?? service.generateSnapshot();
+      const command: Command = {
+        type: CommandTypes.GenerateWorld,
+        payload: {},
+        meta: { aggId: "world:bootstrap" }
+      };
+
+      const events = this.runtime.dispatch(command);
+      if (events.length === 0) {
+        return service.generateSnapshot();
+      }
+
+      const base = service.generateSnapshot();
+      const cells = base.cells.map((row) => row.slice());
+
+      events
+        .filter((evt) => evt.type === EventTypes.BlockSet)
+        .forEach((evt) => {
+          const payload = evt.payload as { position: { x: number; y: number }; material: string };
+          const { x, y } = payload.position;
+          if (cells[y] && cells[y][x] !== undefined) {
+            cells[y][x] = payload.material;
+          }
+        });
+
+      return {
+        ...base,
+        cells
+      };
     }
   };
 }
 
-export function registerWorldRoom<TPlayerState extends Schema>(
-  server: Server,
-  deps: WorldRoomDependencies<TPlayerState>
-): void {
+export function registerWorldRoom(server: Server, deps: WorldRoomDependencies): void {
   const WorldRoom = createWorldRoomClass(deps);
   server.define("world", WorldRoom);
 }

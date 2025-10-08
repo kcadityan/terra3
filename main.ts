@@ -1,4 +1,5 @@
 import { Kernel } from "./engine/kernel";
+import { CommandTypes, EventTypes } from "./engine/shared/contracts";
 import { createDefaultWorldPlan } from "./engine/world/plan/defaultPlan";
 import { initGold, extendGold } from "./mods/gold/server";
 import { registerBaseTerrain } from "./mods/terrain";
@@ -20,8 +21,13 @@ const worldService = createWorldService({
 worldService.registerRuntime(kernel);
 
 // Try dispatching
-kernel.dispatch({ type: "MineGold", payload: { player: "Ashok" } });
 kernel.dispatch({ type: "SmeltGold", payload: { player: "Ashok" } });
-kernel.dispatch({ type: "GenerateWorld", payload: {} });
+kernel.dispatch({ type: CommandTypes.GenerateWorld, payload: {} });
 
-console.log("WorldLog:", kernel.getLog());
+const worldEvents = kernel
+  .getLog()
+  .filter((event) => event.type === EventTypes.BlockSet)
+  .slice(0, 5) // sample for brevity
+  .map((event) => event.payload);
+
+console.log("Sample block events:", worldEvents);
