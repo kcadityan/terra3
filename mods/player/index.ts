@@ -1,3 +1,8 @@
 export * from "./shared/player";
-export { createPlayerManager } from "./server";
-export type { PlayerModuleDependencies, PlayerManager } from "./server";
+export { initPlayerModule, PlayerState } from "./server";
+export type {
+  PlayerModuleConfig,
+  PlayerModuleDeps,
+  PlayerModuleDependencies,
+  PlayerManager
+} from "./server";

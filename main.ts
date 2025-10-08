@@ -17,7 +17,7 @@ const worldService = createWorldService({
   planProvider: () => createDefaultWorldPlan(terrainRegistry)
 });
 
-worldService.registerKernel(kernel);
+worldService.registerRuntime(kernel);
 
 // Try dispatching
 kernel.dispatch({ type: "MineGold", payload: { player: "Ashok" } });

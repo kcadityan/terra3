@@ -1,4 +1,5 @@
-import { Kernel, Command } from "@engine/kernel";
+import type { Command } from "@engine/kernel";
+import type { CommandRuntime } from "@engine/shared/tokens";
 import type { TerrainRegistry, TerrainId } from "../shared/terrain";
 import { WORLD_EVENTS, WORLD_HEIGHT, WORLD_WIDTH, type WorldSnapshot } from "../shared/world";
 
@@ -34,8 +35,8 @@ export function createWorldService(deps: WorldModuleDependencies) {
     };
   }
 
-  function registerKernel(kernel: Kernel) {
-    kernel.register("GenerateWorld", (_cmd: Command) => [
+  function registerRuntime(runtime: CommandRuntime) {
+    runtime.register("GenerateWorld", (_cmd: Command) => [
       {
         type: WORLD_EVENTS.Generated,
         v: 1,
@@ -45,7 +46,7 @@ export function createWorldService(deps: WorldModuleDependencies) {
   }
 
   return {
-    registerKernel,
+    registerRuntime,
     generateSnapshot
   };
 }
