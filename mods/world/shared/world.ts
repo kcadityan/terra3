@@ -1,4 +1,3 @@
-import type { Event } from "@engine/kernel";
 import type { TerrainDefinition, TerrainId } from "./terrain";
 import type { PlayerSnapshot } from "@mods/player/shared/player";
 
@@ -15,12 +14,3 @@ export interface WorldSnapshot {
 export interface WorldStateView extends WorldSnapshot {
   players: PlayerSnapshot[];
 }
-
-export type WorldGeneratedEvent = Event & {
-  type: "WorldGenerated";
-  payload: WorldSnapshot;
-};
-
-export const WORLD_EVENTS = {
-  Generated: "WorldGenerated" as const
-};

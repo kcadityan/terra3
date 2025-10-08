@@ -1,25 +1,22 @@
 import type { MapSchema, Schema } from "@colyseus/schema";
 import type { Server } from "colyseus";
 
-import type { Command, Event } from "@engine/kernel";
+import type { Command, Event, EventDraft } from "@engine/kernel";
 import type { PlayerId, PlayerSnapshot } from "@mods/player/shared/player";
 
 export interface EventBus {
-  publish(event: Event): void;
-  subscribe(handler: (event: Event) => void): () => void;
+  publish(event: Event | Event[]): void;
+  subscribe(eventType: string | "*", handler: (event: Event) => void): () => void;
 }
 
-export type CommandHandler = (command: Command) => Event[];
+export type CommandHandler = (command: Command) => EventDraft[];
 
-export interface CommandDispatcher {
-  dispatch(command: Command): Event[];
-}
-
-export interface CommandRegistry {
+export interface CommandRuntime {
   register(type: string, handler: CommandHandler): void;
+  dispatch(command: Command): Event[];
+  subscribe(eventType: string | "*", handler: (event: Event) => void): () => void;
+  getLog(): Event[];
 }
-
-export type CommandRuntime = CommandDispatcher & CommandRegistry;
 
 export interface Clock {
   now(): number;
